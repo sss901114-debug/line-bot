@@ -1,0 +1,102 @@
+name: LINE Bot 自動推播
+
+on:
+  schedule:
+    # GitHub Actions 使用 UTC 時間，台灣是 UTC+8
+    # 07:00 台灣時間 = 23:00 UTC (前一天)
+    - cron: "0 23 * * *"   # 每天 07:00 台灣時間 → morning
+    # 15:00 台灣時間 = 07:00 UTC
+    - cron: "0 7 * * *"    # 每天 15:00 台灣時間 → afternoon
+    # 19:00 台灣時間 = 11:00 UTC
+    - cron: "0 11 * * *"   # 每天 19:00 台灣時間 → evening
+
+  # 允許手動觸發（測試用）
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "要執行的腳本 (morning / afternoon / evening / all)"
+        required: true
+        default: "morning"
+
+jobs:
+  morning-report:
+    name: 🌅 早報（美股/商品/走勢圖）
+    runs-on: ubuntu-latest
+    # 只在 23:00 UTC cron 或手動選 morning/all 時執行
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 23 * * *') ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.script == 'morning' || github.event.inputs.script == 'all'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run morning script
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TARGET_IDS: ${{ secrets.LINE_TARGET_IDS }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: python scripts/morning.py
+
+  afternoon-report:
+    name: ☀️ 午報（Google 熱搜）
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 7 * * *') ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.script == 'afternoon' || github.event.inputs.script == 'all'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run afternoon script
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TARGET_IDS: ${{ secrets.LINE_TARGET_IDS }}
+        run: python scripts/afternoon.py
+
+  evening-report:
+    name: 🌆 晚報（台股盤後）
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 11 * * *') ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.script == 'evening' || github.event.inputs.script == 'all'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run evening script
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TARGET_IDS: ${{ secrets.LINE_TARGET_IDS }}
+        run: python scripts/evening.py
