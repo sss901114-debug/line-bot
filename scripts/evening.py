@@ -167,39 +167,46 @@ def get_hot_stocks():
 
 
 def get_mops_announcements():
+    import re as _re
     lines = [section("📢  公開資訊觀測站重大訊息"), ""]
     try:
-        url = "https://mops.twse.com.tw/mops/web/ajax_t05sr01"
-        payload = {
-            "encodeURIComponent":"1","step":"1","firstin":"1","off":"1",
-            "keyword4":"","code1":"","TYPEK2":"","checkbtn":"",
-            "queryName":"co_id","inpuType":"co_id","TYPEK":"all","isnew":"true",
-        }
-        resp = requests.post(url, data=payload, headers={**HEADERS,
-            "Referer":"https://mops.twse.com.tw/mops/web/t05sr01"}, timeout=15)
+        # 使用 MOPS OpenData API（較穩定）
+        import datetime as _dt
+        today = _dt.date.today().strftime("%Y%m%d")
+        url = f"https://mops.twse.com.tw/mops/api/newMOPS?encodeURIComponent=1&step=1&firstin=1&off=1&keyword4=&code1=&TYPEK2=&checkbtn=&queryName=co_id&inpuType=co_id&TYPEK=all&isnew=true&clazz=&co_id=&start_date={today}&end_date={today}"
+        resp = requests.get(url, headers={**HEADERS,
+            "Referer":"https://mops.twse.com.tw/"}, timeout=15)
         resp.encoding = "utf-8"
-        soup = BeautifulSoup(resp.text, "html.parser")
-        table = soup.find("table", class_="hasBorder") or soup.find("table")
-
-        if table:
-            count = 0
-            for row in table.find_all("tr")[1:16]:
-                cols = row.find_all("td")
-                if len(cols) >= 4:
-                    time_str = cols[0].get_text(strip=True)
-                    company = cols[1].get_text(strip=True)
-                    subject = cols[3].get_text(strip=True)[:45]
-                    lines.append(f"⏰ {time_str}  {company}")
-                    lines.append(f"   📌 {subject}")
-                    lines.append("")
-                    count += 1
-            if count == 0:
-                lines.append("今日暫無重大訊息\n")
+        data = resp.json()
+        items = data.get("items", []) or data.get("data", [])
+        if items:
+            for item in items[:12]:
+                time_str = str(item.get("發言時間", item.get("time", "")))[:5]
+                company  = item.get("公司名稱", item.get("company", ""))
+                subject  = item.get("主旨", item.get("subject", ""))[:45]
+                lines.append(f"⏰ {time_str}  {company}")
+                lines.append(f"   📌 {subject}")
+                lines.append("")
         else:
-            lines.append("⚠️ 解析失敗，請直接查閱：")
-            lines.append("🔗 https://mops.twse.com.tw/mops/web/t05sr01\n")
+            # fallback: Google News RSS
+            rss_url = "https://news.google.com/rss/search?q=重大訊息+台股+site:mops.twse.com.tw&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
+            rss = requests.get(rss_url, timeout=10, headers={"User-Agent":"Mozilla/5.0"})
+            soup = BeautifulSoup(rss.content, "xml")
+            rss_items = soup.find_all("item")[:8]
+            if rss_items:
+                for it in rss_items:
+                    t = it.find("title")
+                    if t:
+                        lines.append(f"📌 {t.get_text(strip=True)[:50]}")
+                        lines.append("")
+            else:
+                lines.append("今日重大訊息請至 MOPS 查閱：")
+                lines.append("🔗 https://mops.twse.com.tw/mops/web/t05sr01")
+                lines.append("")
     except Exception as e:
-        lines.append(f"⚠️ 抓取失敗：{e}\n")
+        lines.append("今日重大訊息請至 MOPS 查閱：")
+        lines.append("🔗 https://mops.twse.com.tw/mops/web/t05sr01")
+        lines.append("")
     return "\n".join(lines)
 
 
